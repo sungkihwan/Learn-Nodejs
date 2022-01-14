@@ -19,6 +19,30 @@ app.use(session({ secret: 'secretKey', resave: true, saveUninitialized: false })
 app.use(passport.initialize());
 app.use(passport.session());
 
+// npm install multer -> 파일전송 라이브러리
+let multer = require('multer');
+// var storage = multer.memoryStorage();
+var storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+        cb(null, './public/image')
+    },
+    filename: function(req, file, cb) {
+        cb(null, file.originalname)
+    },
+    fileFilter: function(req, file, callback) {
+        var ext = path.extname(file.originalname);
+        if (ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg') {
+            return callback(new Error('PNG, JPG만 업로드하세요'))
+        }
+        callback(null, true)
+    },
+    limits: {
+        fileSize: 1024 * 1024
+    }
+})
+
+var upload = multer({ storage: storage });
+
 // npm install method-override --save (form 에서 PUT, DELETE 사용)
 const methodOverride = require('method-override')
 app.use(methodOverride('_method'))
@@ -89,6 +113,9 @@ app.get('/', function(req, res) {
     res.render('index.ejs')
 });
 
+// 라우터 가져오기
+app.use('/shop', require('./routes/shop.js'));
+
 // 작성화면
 app.get('/write', function(req, res) {
     // res.sendFile(__dirname + '/write.html')
@@ -110,6 +137,7 @@ app.post('/add', function(req, res) {
     db.collection('counter').findOne({ name: '게시물' }, function(err, res) {
         if (err) return console.log(err)
         req.body._id = res.totalPost + 1
+        req.body.userId = req.user._id
         db.collection('post').insertOne(req.body, function(err, res) {
             if (err) return console.log(err)
             db.collection('counter').updateOne({ name: '게시물' }, { $inc: { totalPost: 1 } }, function(err, res) {
@@ -123,6 +151,7 @@ app.post('/add', function(req, res) {
 // 삭제하기
 app.delete('/delete/', function(req, res) {
     req.body._id = parseInt(req.body._id);
+    req.body.userId = req.user._id;
     db.collection('post').deleteOne(req.body, function(err, response) {
         if (err) return console.log(err);
         res.status(200).send({ message: '삭제 성공' })
@@ -171,26 +200,45 @@ app.get('/mypage', checkLogin, function(req, res) {
     res.render('mypage.ejs', { user: req.user })
 })
 
+// 검색기능 -> 몽고디비 검색엔진 사용
 app.get('/search', (req, res) => {
     var searchKeywords = [{
             $search: {
                 index: 'titleSearch',
                 text: {
                     query: req.query.value,
-                    path: 'title' // 제목날짜 둘다 찾고 싶으면 ['제목', '날짜']
+                    path: ['title', 'date'] // 제목날짜 둘다 찾고 싶으면 ['제목', '날짜']
                 }
             }
         },
-        // 결과를 정렬
-        { $sort: { _id: 1 } },
-        // sql limit과 같음
-        { $limit: 10 },
-        // 0은 안보여주고 1은 보여줌
-        { $project: { title: 1, _id: 0 } }
+        // // 결과를 정렬
+        // { $sort: { _id: 1 } },
+        // // sql limit과 같음
+        // { $limit: 10 },
+        // // 0은 안보여주고 1은 보여줌
+        // { $project: { title: 1, _id: 0 } }
     ]
 
-    console.log(req.query.value)
+    // console.log(req.query.value)
     db.collection('post').aggregate(searchKeywords).toArray((err, result) => {
         console.log(result)
     })
+})
+
+// 회원가입
+app.post('/register', (req, res) => {
+    db.collection('login').insertOne(req.body, (err, result) => {
+        res.redirect('/')
+    })
+})
+
+//이미지 업로드
+
+app.get('/upload', (req, res) => {
+    res.render('imageUpload.ejs')
+})
+
+// upload.array('profile', 10) -> 여러개 한번에 저장
+app.post('/imageUpload', upload.single('profile'), (req, res) => {
+    res.render('list.ejs')
 })

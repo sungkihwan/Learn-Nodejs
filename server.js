@@ -47,6 +47,11 @@ var upload = multer({ storage: storage });
 const methodOverride = require('method-override')
 app.use(methodOverride('_method'))
 
+// npm install socket.io
+const http = require('http').createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(http);
+
 // npm install mongodb
 const MongoClient = require('mongodb').MongoClient;
 const res = require('express/lib/response');
@@ -58,7 +63,7 @@ MongoClient.connect(process.env.DB_URL, function(err, client) {
     db = client.db('todoapp')
 
     // DB 연결 확인 후 app 시작
-    app.listen(process.env.PORT, function() {
+    http.listen(process.env.PORT, function() {
         console.log('listen 8080')
     });
 })
@@ -241,4 +246,28 @@ app.get('/upload', (req, res) => {
 // upload.array('profile', 10) -> 여러개 한번에 저장
 app.post('/imageUpload', upload.single('profile'), (req, res) => {
     res.render('list.ejs')
+})
+
+// 소켓페이지 렌더
+app.get('/socket', (req, res) => {
+    res.render('socket.ejs')
+})
+
+// 소켓 연결
+io.on('connection', function(socket) {
+    console.log('소켓접속')
+
+    socket.on('joinroom', function(data) {
+        socket.join("room1");
+    });
+
+    socket.on('room1-send', function(data) {
+        io.to("room1").emit('broadcast', data);
+    });
+
+    // socket.on('my_name', function(data) {
+    //     console.log(data)
+    //     io.emit('broadcast', "hello") // 해당 페이지에 있는 모든 사람한테 데이터 전송 (단체챗방)
+    //         // io.to(socket.id).emit('broadcast', "hello") -> 메시지 받은 사람한테만 데이터 전송
+    // })
 })
